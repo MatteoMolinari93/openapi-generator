@@ -43,7 +43,7 @@ public class JavaJerseyServerCodegenTest extends JavaJaxrsBaseTest {
         Assert.assertEquals(codegen.getName(), "jaxrs-jersey");
         Assert.assertEquals(codegen.getTemplatingEngine().getClass(), MustacheEngineAdapter.class);
         Assert.assertEquals(codegen.getDateLibrary(), "legacy");
-        Assert.assertEquals(codegen.supportedLibraries().keySet(), ImmutableSet.of("jersey2", "jersey3"));
+        Assert.assertEquals(codegen.supportedLibraries().keySet(), ImmutableSet.of("jersey2", "jersey3", "jersey3-spring-boot4"));
         Assert.assertNull(codegen.getInputSpec());
 
         codegen.processOpts();
@@ -174,6 +174,39 @@ public class JavaJerseyServerCodegenTest extends JavaJaxrsBaseTest {
                     // Let's confirm that "javax.ws" is not present
                     TestUtils.assertFileNotContains(file.toPath(), "javax.ws");
                 });
+    }
+
+    @Test
+    public void testJersey3SpringBoot4() throws Exception {
+        codegen.setLibrary("jersey3-spring-boot4");
+        codegen.setDateLibrary("java8");
+
+        final Map<String, File> files = generateFiles(codegen, "src/test/resources/3_0/petstore.yaml");
+
+        // Jersey3 + Spring Boot 4 uses "jakarta.ws.rs"
+        files.values()
+                .stream()
+                .filter(file -> file.getName().endsWith(".java"))
+                .forEach(file -> TestUtils.assertFileNotContains(file.toPath(), "javax.ws"));
+
+        // Spring Boot specific files must be present
+        Assert.assertTrue(files.containsKey("OpenApiGeneratorApplication.java"), "OpenApiGeneratorApplication.java must be generated");
+        Assert.assertTrue(files.containsKey("JerseyConfig.java"), "JerseyConfig.java must be generated");
+        Assert.assertTrue(files.containsKey("application.properties"), "application.properties must be generated");
+
+        // WAR-specific files must NOT be generated
+        Assert.assertFalse(files.containsKey("web.xml"), "web.xml must not be generated for Spring Boot");
+        Assert.assertFalse(files.containsKey("Bootstrap.java"), "Bootstrap.java must not be generated for Spring Boot");
+        Assert.assertFalse(files.containsKey("JacksonJsonProvider.java"), "JacksonJsonProvider.java must not be generated for Spring Boot");
+
+        // Main application must contain @SpringBootApplication
+        assertFileContains(files.get("OpenApiGeneratorApplication.java").toPath(), "@SpringBootApplication");
+
+        // JerseyConfig must extend ResourceConfig and be annotated with @Component
+        assertFileContains(files.get("JerseyConfig.java").toPath(), "ResourceConfig", "@Component");
+
+        // useSpringBoot4 flag must be set
+        Assert.assertEquals(codegen.additionalProperties().get("useSpringBoot4"), Boolean.TRUE);
     }
 
     @DataProvider(name = "codegenParameterMatrix")
